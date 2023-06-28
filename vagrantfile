@@ -1,0 +1,63 @@
+# Especifica a versão do Vagrant
+Vagrant.configure("2") do |config|
+
+  # Box a ser usada para as máquinas virtuais
+  config.vm.box = "ubuntu/focal64"
+
+  # Define as máquinas virtuais
+  config.vm.define "master" do |master|
+    master.vm.hostname = "master"  # Nome da máquina virtual
+    master.vm.network "private_network", ip: "192.168.33.10"  # IP fixo da máquina virtual
+
+    # Configurações da máquina virtual
+    master.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"  # Quantidade de memória RAM alocada para a máquina virtual
+      vb.cpus = 1  # Número de CPUs alocadas para a máquina virtual
+    end
+
+    # Provisionamento com o Docker
+    master.vm.provision "shell", inline: <<-SHELL
+      # Instalação do Docker
+      curl -fsSL https://get.docker.com -o get-docker.sh
+      sudo sh get-docker.sh
+
+      # Adicionar usuário ao grupo docker
+      sudo usermod -aG docker vagrant
+    SHELL
+
+    # Configura o nó master do Swarm
+    master.vm.provision "shell", inline: <<-SHELL
+      sudo docker swarm init --advertise-addr 192.168.33.10
+    SHELL
+  end
+
+  # Define as máquinas worker
+  ["node01", "node02", "node03"].each do |node_name|
+    config.vm.define node_name do |node|
+      node.vm.hostname = node_name  # Nome da máquina virtual
+      node.vm.network "private_network", ip: "192.168.33.#{node_name.sub("node", "")}"  # IP fixo da máquina virtual
+
+      # Configurações da máquina virtual
+      node.vm.provider "virtualbox" do |vb|
+        vb.memory = "1024"  # Quantidade de memória RAM alocada para a máquina virtual
+        vb.cpus = 1  # Número de CPUs alocadas para a máquina virtual
+      end
+
+      # Provisionamento com o Docker
+      node.vm.provision "shell", inline: <<-SHELL
+        # Instalação do Docker
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sudo sh get-docker.sh
+
+        # Adicionar usuário ao grupo docker
+        sudo usermod -aG docker vagrant
+      SHELL
+
+      # Adiciona os nós workers ao cluster Swarm
+      node.vm.provision "shell", inline: <<-SHELL
+        sudo docker swarm join --token <TOKEN> 192.168.33.10:2377
+      SHELL
+    end
+  end
+
+end
